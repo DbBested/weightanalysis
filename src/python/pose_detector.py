@@ -23,6 +23,7 @@ class PoseData:
     keypoints: Dict[str, Keypoint]
     frame_idx: int
     visibility_score: float  # Overall pose visibility
+    segmentation_mask: Optional[np.ndarray] = None  # Person segmentation mask
 
 
 class PoseDetector:
@@ -102,11 +103,17 @@ class PoseDetector:
 
         visibility_score = total_visibility / len(results.pose_landmarks.landmark)
 
+        # Extract segmentation mask if available
+        segmentation_mask = None
+        if results.segmentation_mask is not None:
+            segmentation_mask = results.segmentation_mask
+
         return PoseData(
             timestamp=timestamp,
             keypoints=keypoints,
             frame_idx=frame_idx,
-            visibility_score=visibility_score
+            visibility_score=visibility_score,
+            segmentation_mask=segmentation_mask
         )
 
     def detect_pose_sequence(self, frames: List[Tuple[int, float, np.ndarray]]) -> List[PoseData]:
@@ -244,11 +251,72 @@ class PoseDetector:
 
         return annotated
 
+    def get_person_mask(self, pose: PoseData, threshold: float = 0.5) -> Optional[np.ndarray]:
+        """
+        Get binary mask of person from segmentation.
+
+        Args:
+            pose: PoseData object with segmentation mask
+            threshold: Threshold for binary mask (0-1)
+
+        Returns:
+            Binary mask as uint8 (0 or 255) or None if no mask
+        """
+        if pose.segmentation_mask is None:
+            return None
+
+        # Convert to binary mask
+        mask = (pose.segmentation_mask > threshold).astype(np.uint8) * 255
+        return mask
+
+    def draw_segmentation(self, frame: np.ndarray, pose: PoseData,
+                         alpha: float = 0.5, color: Tuple[int, int, int] = (0, 255, 0)) -> np.ndarray:
+        """
+        Overlay segmentation mask on frame.
+
+        Args:
+            frame: Input frame
+            pose: PoseData object with segmentation mask
+            alpha: Transparency of overlay (0-1)
+            color: RGB color for person mask
+
+        Returns:
+            Frame with segmentation overlay
+        """
+        if pose.segmentation_mask is None:
+            return frame
+
+        annotated = frame.copy()
+
+        # Get binary mask
+        mask = self.get_person_mask(pose, threshold=0.5)
+        if mask is None:
+            return frame
+
+        # Resize mask to frame size if needed
+        if mask.shape[:2] != frame.shape[:2]:
+            mask = cv2.resize(mask, (frame.shape[1], frame.shape[0]))
+
+        # Create colored overlay
+        overlay = np.zeros_like(frame)
+        overlay[mask > 127] = color
+
+        # Blend with original frame
+        annotated = cv2.addWeighted(frame, 1.0, overlay, alpha, 0)
+
+        return annotated
+
     def release(self):
         """Release MediaPipe resources."""
-        if self.pose:
-            self.pose.close()
+        if hasattr(self, 'pose') and self.pose:
+            try:
+                self.pose.close()
+            except (ValueError, AttributeError):
+                pass  # Already closed
 
     def __del__(self):
         """Destructor."""
-        self.release()
+        try:
+            self.release()
+        except:
+            pass  # Ignore cleanup errors
