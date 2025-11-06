@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.dylib
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# C++
+*.o
+*.obj
+*.a
+*.lib
+*.out
+*.app
+*.exe
+*.dll
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Output
+output/
+results/
+*.mp4
+*.avi
+*.mov
+*.json
+!package.json
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Logs
+*.log
+
+# Test videos (keep small test files)
+!test_videos/*.mp4
