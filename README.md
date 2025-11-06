@@ -159,32 +159,3 @@ make -j
 ctest  # if you have tests
 make install
 ```
-
-## Contributing
-
-Fork the repo, make your changes, add tests if you can, and submit a pull request.
-
-## License
-
-MIT License. See LICENSE file.
-
-## Citation
-
-If you use this in research:
-
-```bibtex
-@software{weightlifting_analysis_2024,
-  title = {Weightlifting Analysis: Biomechanical Video Analysis System},
-  author = {Thomas Li},
-  year = {2024},
-  url = {https://github.com/DbBested/weightanalysis}
-}
-```
-
-## Acknowledgments
-
-Built using MediaPipe for pose detection, Eigen for linear algebra, pybind11 for Python/C++ bindings, and OpenCV for video processing.
-
-## Note
-
-This tool is for training and educational purposes. Consult with qualified coaches and medical professionals for actual exercise guidance.
