@@ -1,117 +1,86 @@
 # Weightlifting Analysis System
 
-A high-performance application for analyzing weightlifting videos with biomechanical insights using computer vision and multibody dynamics.
+This is a tool for analyzing weightlifting videos using computer vision and physics simulation. It tracks the lifter and barbell, computes forces through inverse dynamics, and visualizes everything on top of the video.
 
-![Demo](docs/demo.gif)
+## What it does
+
+The system automatically detects your body position using MediaPipe and tracks the barbell through the lift. It then runs multibody inverse dynamics to calculate forces, torques, and power output. You get an annotated video showing force arrows, bar bending, trajectory paths, and timing for each phase of the lift.
+
+The physics calculations run in C++ for performance (about 10-100x faster than pure Python), while the video processing and UI are in Python. On a typical laptop, processing takes about 1.5 minutes per minute of 1080p video.
 
 ## Features
 
-### 🎯 Automatic Detection
-- **Pose Detection**: MediaPipe-based full-body pose tracking
-- **Bar Segmentation**: Automatic barbell detection and tracking using Hough transforms
-- **Robust Tracking**: Maintains tracking through occlusions and motion blur
+**Computer Vision**
+- Full body pose tracking with MediaPipe
+- Automatic barbell detection and tracking using Hough line transforms
+- Works through partial occlusions and motion blur
 
-### 📊 Physics Analysis
-- **Inverse Dynamics**: Multibody recursive Newton-Euler algorithm
-- **Parameter Estimation**: Estimates bar mass and body segment parameters
-- **State Estimation**: Physics-informed Kalman filtering for smooth trajectories
-- **Bar Bending**: Beam theory-based deflection and stress analysis
+**Physics**
+- Multibody inverse dynamics using recursive Newton-Euler algorithm
+- Estimates bar mass and body segment parameters from the video
+- Physics-informed Kalman filtering to smooth noisy tracking data
+- Bar bending analysis using Euler-Bernoulli beam theory
 
-### 🎨 Interactive Visualization
-- **Force Arrows**: Real-time force vectors with numeric values (Newtons)
-- **Bar Bending**: Visual highlighting of deflection and critical stress regions
-- **Phase Detection**: Automatic labeling (setup, descent, bottom, ascent, completion)
-- **Trajectory Trails**: Bar path visualization with fading history
-- **Summary Statistics**: Peak loads, power output, and timing metrics
+**Visualization**
+- Force vectors drawn on the bar with magnitude in Newtons
+- Bar deflection overlay showing where it bends
+- Trajectory trail following the bar path
+- Automatic phase labels (setup, descent, bottom, ascent, completion)
+- Summary stats for peak force, power, and timing
 
-### ⚡ Performance
-- **C++ Backend**: Optimized dynamics solver (10-100x faster than pure Python)
-- **Parallel Processing**: Multi-threaded frame analysis
-- **Consumer Hardware**: Runs on standard laptops (no GPU required)
-- **Real-time Capable**: 30+ fps processing on modern CPUs
+**Performance**
+- C++ backend handles all physics computation
+- Runs on regular laptops without needing a GPU
+- Processes about 30+ fps on modern CPUs
+- Multi-threaded frame analysis
 
-## Architecture
+## Installation
 
-```
-┌─────────────────────────────────────────────┐
-│         Python Frontend (UI/Vision)         │
-│  • Video I/O         • Visualization        │
-│  • Pose Detection    • Interactive Viewer   │
-│  • Bar Tracking      • Phase Detection      │
-└──────────────────┬──────────────────────────┘
-                   │ pybind11
-┌──────────────────▼──────────────────────────┐
-│         C++ Backend (Physics/Compute)       │
-│  • Multibody Dynamics  • Bar Bending        │
-│  • Inverse Dynamics    • Parameter Est.     │
-│  • State Estimation    • Eigen3 Linear Alg. │
-└─────────────────────────────────────────────┘
-```
-
-## Quick Start
-
-### Prerequisites
-
-- Python 3.8 or higher
-- CMake 3.15 or higher
-- C++17 compiler (GCC 7+, Clang 5+, MSVC 2017+)
-- Eigen3 library
-
-### Installation
+You need Python 3.8+, CMake 3.15+, a C++17 compiler, and Eigen3.
 
 **macOS:**
 ```bash
-# Install dependencies
 brew install eigen cmake
-
-# Clone and build
-git clone https://github.com/yourusername/weightanalysis.git
+git clone https://github.com/DbBested/weightanalysis.git
 cd weightanalysis
 ./build.sh
 ```
 
 **Linux (Ubuntu/Debian):**
 ```bash
-# Install dependencies
-sudo apt-get update
 sudo apt-get install libeigen3-dev cmake build-essential python3-dev
-
-# Clone and build
-git clone https://github.com/yourusername/weightanalysis.git
+git clone https://github.com/DbBested/weightanalysis.git
 cd weightanalysis
 ./build.sh
 ```
 
 **Windows:**
 ```bash
-# Install Eigen3 and CMake via vcpkg or manually
-# Then build
-git clone https://github.com/yourusername/weightanalysis.git
+# Install Eigen3 and CMake via vcpkg or manually, then:
+git clone https://github.com/DbBested/weightanalysis.git
 cd weightanalysis
 mkdir build && cd build
 cmake ..
 cmake --build . --config Release
 ```
 
-### Basic Usage
+## Usage
 
 ```bash
 python3 src/python/main.py --video squat.mp4 --lift-type squat
 ```
 
-See [USAGE.md](USAGE.md) for detailed documentation.
+The program will process the video and open an interactive viewer when done. You can step through frames, toggle overlays, and adjust playback speed. It also saves an annotated video and JSON file with all the analysis data.
 
-## Example Output
+See [USAGE.md](USAGE.md) for more details.
 
-### Video Analysis
-The system generates an annotated video showing:
-- Real-time force vectors on the bar
-- Bar bending visualization (deflection in mm)
-- Bar trajectory trail
-- Phase labels with timing
-- Peak force and power metrics
+## Output
 
-### JSON Summary
+The system generates two files:
+
+An annotated video with force arrows, bar bending visualization, trajectory trail, and phase labels overlaid on each frame.
+
+A JSON file with the raw data:
 ```json
 {
   "lift_type": "squat",
@@ -128,43 +97,38 @@ The system generates an annotated video showing:
 
 ## Supported Lifts
 
-- ✅ **Squat** (Back squat, Front squat)
-- ✅ **Bench Press**
-- ✅ **Deadlift** (Conventional, Sumo)
-- 🚧 **Overhead Press** (coming soon)
-- 🚧 **Olympic Lifts** (Snatch, Clean & Jerk - future)
+Currently works with squats, bench press, and deadlifts. Overhead press is partially implemented. Olympic lifts (snatch, clean & jerk) might be added later but need more complex models.
 
-## Technical Details
+## How it works
 
-### Computer Vision
-- **Pose**: MediaPipe Pose (BlazePose model)
-- **Bar Tracking**: Hough Line Transform + Optical Flow
-- **Segmentation**: Color-based + edge detection
+**Computer Vision**
+- Uses MediaPipe Pose (BlazePose model) for body tracking
+- Tracks the bar with Hough line transforms plus optical flow
+- Color-based segmentation and edge detection for bar isolation
 
-### Biomechanics
-- **Model**: Multi-segment rigid body (6-12 DOF)
-- **Solver**: Recursive Newton-Euler Algorithm (RNEA)
-- **Kinematics**: Central difference differentiation with Savitzky-Golay smoothing
-- **Estimation**: Constrained least squares + Kalman filtering
+**Biomechanics**
+- Multi-segment rigid body model with 6-12 degrees of freedom
+- Recursive Newton-Euler Algorithm for inverse dynamics
+- Central difference for velocities and accelerations with Savitzky-Golay smoothing
+- Constrained least squares and Kalman filtering for parameter estimation
 
-### Bar Physics
-- **Model**: Euler-Bernoulli beam theory
-- **Material**: Steel (E = 200 GPa, standard Olympic bar)
-- **Deflection**: Superposition of point loads
-- **Critical Regions**: Bending moment > 70% of peak
+**Bar Physics**
+- Euler-Bernoulli beam theory for deflection
+- Models a standard Olympic bar (steel, E = 200 GPa)
+- Superposition of point loads at hand positions
+- Highlights critical regions where bending moment exceeds 70% of peak
 
-## Performance Benchmarks
+## Benchmarks
 
-On Apple M1 Pro (Consumer Laptop):
+Tested on Apple M1 Pro:
 - Video Processing: ~60 fps
 - Pose Detection: ~35 fps
 - Bar Tracking: ~120 fps
 - Inverse Dynamics: ~2000 fps (C++ backend)
-- **Overall**: ~1.5 minutes for 1 minute of 1080p video
+- Overall: ~1.5 minutes per minute of 1080p video
 
-## Development
+## Project Structure
 
-### Project Structure
 ```
 weightanalysis/
 ├── src/
@@ -186,58 +150,41 @@ weightanalysis/
 └── README.md
 ```
 
-### Building from Source
+## Building from Source
 
 ```bash
-# Development build
 mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Debug
 make -j
-
-# Run tests (if implemented)
-ctest
-
-# Install
+ctest  # if you have tests
 make install
 ```
 
 ## Contributing
 
-Contributions welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for new functionality
-4. Submit a pull request
+Fork the repo, make your changes, add tests if you can, and submit a pull request.
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+MIT License. See LICENSE file.
 
 ## Citation
 
-If you use this tool in research, please cite:
+If you use this in research:
 
 ```bibtex
 @software{weightlifting_analysis_2024,
   title = {Weightlifting Analysis: Biomechanical Video Analysis System},
-  author = {Your Name},
+  author = {Thomas Li},
   year = {2024},
-  url = {https://github.com/yourusername/weightanalysis}
+  url = {https://github.com/DbBested/weightanalysis}
 }
 ```
 
 ## Acknowledgments
 
-- MediaPipe team for pose detection
-- Eigen library for linear algebra
-- pybind11 for seamless C++ integration
-- OpenCV community
+Built using MediaPipe for pose detection, Eigen for linear algebra, pybind11 for Python/C++ bindings, and OpenCV for video processing.
 
-## Contact
+## Note
 
-- Issues: [GitHub Issues](https://github.com/yourusername/weightanalysis/issues)
-- Email: your.email@example.com
-
----
-
-**Note**: This tool is for educational and training purposes. Always consult with qualified coaches and medical professionals for exercise guidance.
+This tool is for training and educational purposes. Consult with qualified coaches and medical professionals for actual exercise guidance.
