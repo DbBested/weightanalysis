@@ -4,6 +4,7 @@
 import argparse
 import sys
 import json
+import cv2
 import numpy as np
 from pathlib import Path
 from typing import List, Tuple
@@ -104,7 +105,20 @@ def analyze_lift(video_path: str, lift_type: str = 'squat', output_dir: str = 'o
     # Step 3: Track barbell
     print("\n[3/7] Tracking barbell...")
     bar_tracker = BarTracker(initial_detection_method='hough')
-    bar_detections = bar_tracker.track_sequence(frames)
+
+    # Extract person masks to help with bar detection
+    person_masks = []
+    for i in range(len(frames)):
+        if i < len(poses) and poses[i].segmentation_mask is not None:
+            mask = pose_detector.get_person_mask(poses[i], threshold=0.5)
+            # Resize mask to match frame size if needed
+            if mask is not None and mask.shape[:2] != frames[i].shape[:2]:
+                mask = cv2.resize(mask, (frames[i].shape[1], frames[i].shape[0]))
+            person_masks.append(mask)
+        else:
+            person_masks.append(None)
+
+    bar_detections = bar_tracker.track_sequence(frames, person_masks=person_masks)
 
     valid_detections = [d for d in bar_detections if d is not None]
     print(f"  Tracked bar in {len(valid_detections)}/{len(frames)} frames")
@@ -199,11 +213,25 @@ def analyze_lift(video_path: str, lift_type: str = 'squat', output_dir: str = 'o
         current_phase = phase_detector.get_phase_at_frame(phases, i)
         current_time = timestamps[i]
 
+        # Start with base frame
+        annotated = frame.copy()
+
+        # Draw segmentation if available
+        if i < len(poses) and poses[i].segmentation_mask is not None:
+            annotated = pose_detector.draw_segmentation(annotated, poses[i], alpha=0.15, color=(0, 255, 0))
+
+        # Only draw bar analysis if we have valid detection
         bar_detection = bar_detections[i] if i < len(bar_detections) else None
 
-        if bar_detection and dynamics_result and i < len(dynamics_result.bar_forces):
-            # Get force
-            force_vector = dynamics_result.bar_forces[i]
+        # Find corresponding bar position index (not all frames have detections)
+        bar_idx = None
+        if bar_detection:
+            # Count how many valid detections we've had up to this point
+            bar_idx = sum(1 for d in bar_detections[:i+1] if d is not None) - 1
+
+        if bar_detection and bar_idx is not None and bar_idx < len(bar_positions) and dynamics_result and bar_idx < len(dynamics_result.bar_forces):
+            # Get force for this bar position
+            force_vector = dynamics_result.bar_forces[bar_idx]
 
             # Get bending
             if bending_model:
@@ -215,8 +243,8 @@ def analyze_lift(video_path: str, lift_type: str = 'squat', output_dir: str = 'o
                 deflection = []
                 critical_regions = []
 
-            # Trajectory
-            trajectory = [(p[0], p[1]) for p in bar_positions[:i+1]]
+            # Trajectory (only valid positions)
+            trajectory = [(p[0], p[1]) for p in bar_positions[:bar_idx+1]]
 
             # Summary
             summary = {
@@ -227,13 +255,13 @@ def analyze_lift(video_path: str, lift_type: str = 'squat', output_dir: str = 'o
 
             # Create complete visualization
             annotated = visualizer.create_complete_visualization(
-                frame, bar_detection.center, bar_detection.endpoints,
+                annotated, bar_detection.center, bar_detection.endpoints,
                 force_vector, deflection, critical_regions,
-                trajectory, i, current_phase, current_time, summary
+                trajectory, bar_idx, current_phase, current_time, summary
             )
         else:
-            # Basic annotation
-            annotated = visualizer.draw_phase_label(frame, current_phase, current_time)
+            # Just add phase label
+            annotated = visualizer.draw_phase_label(annotated, current_phase, current_time)
 
         annotated_frames.append(annotated)
 

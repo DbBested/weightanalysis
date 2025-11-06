@@ -30,13 +30,15 @@ class BarTracker:
         self.method = initial_detection_method
         self.prev_detection = None
 
-    def detect_bar_initial(self, frame: np.ndarray, roi: Optional[Tuple[int, int, int, int]] = None) -> Optional[BarDetection]:
+    def detect_bar_initial(self, frame: np.ndarray, roi: Optional[Tuple[int, int, int, int]] = None,
+                          person_mask: Optional[np.ndarray] = None) -> Optional[BarDetection]:
         """
         Detect bar in the first frame (or manually).
 
         Args:
             frame: Input frame
             roi: Region of interest (x, y, w, h) or None for full frame
+            person_mask: Optional person segmentation mask to exclude
 
         Returns:
             BarDetection or None
@@ -44,12 +46,14 @@ class BarTracker:
         if roi:
             x, y, w, h = roi
             search_region = frame[y:y+h, x:x+w]
+            mask_region = person_mask[y:y+h, x:x+w] if person_mask is not None else None
         else:
             search_region = frame
+            mask_region = person_mask
             x, y = 0, 0
 
         if self.method == 'hough':
-            detection = self._detect_bar_hough(search_region)
+            detection = self._detect_bar_hough(search_region, mask_region)
         else:
             detection = self._detect_bar_color(search_region)
 
@@ -66,10 +70,22 @@ class BarTracker:
 
         return detection
 
-    def _detect_bar_hough(self, frame: np.ndarray) -> Optional[BarDetection]:
-        """Detect bar using Hough line transform."""
+    def _detect_bar_hough(self, frame: np.ndarray, mask: Optional[np.ndarray] = None) -> Optional[BarDetection]:
+        """Detect bar using Hough line transform.
+
+        Args:
+            frame: Input frame
+            mask: Optional mask to exclude regions (0 = exclude, 255 = include)
+        """
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        edges = cv2.Canny(gray, 50, 150)
+
+        # Apply mask if provided (invert person mask to exclude person)
+        if mask is not None:
+            # Invert mask so person area is black (excluded)
+            inverted_mask = cv2.bitwise_not(mask)
+            gray = cv2.bitwise_and(gray, gray, mask=inverted_mask)
+
+        edges = cv2.Canny(gray, 30, 100)  # Lower thresholds for better detection
 
         # Detect lines
         lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=100,
@@ -171,20 +187,22 @@ class BarTracker:
             bounding_box=bbox
         )
 
-    def track_bar(self, frame: np.ndarray, prev_detection: BarDetection) -> Optional[BarDetection]:
+    def track_bar(self, frame: np.ndarray, prev_detection: BarDetection,
+                  person_mask: Optional[np.ndarray] = None) -> Optional[BarDetection]:
         """
         Track bar in subsequent frames using optical flow or template matching.
 
         Args:
             frame: Current frame
             prev_detection: Previous bar detection
+            person_mask: Optional person segmentation mask
 
         Returns:
             Updated BarDetection or None
         """
         # Search in neighborhood of previous detection
         cx, cy = prev_detection.center
-        search_radius = 50
+        search_radius = 100  # Increased search radius
 
         x1 = max(0, int(cx - search_radius))
         y1 = max(0, int(cy - search_radius))
@@ -192,15 +210,17 @@ class BarTracker:
         y2 = min(frame.shape[0], int(cy + search_radius))
 
         roi = (x1, y1, x2 - x1, y2 - y1)
-        return self.detect_bar_initial(frame, roi)
+        return self.detect_bar_initial(frame, roi, person_mask=person_mask)
 
-    def track_sequence(self, frames: List[np.ndarray], initial_detection: Optional[BarDetection] = None) -> List[Optional[BarDetection]]:
+    def track_sequence(self, frames: List[np.ndarray], initial_detection: Optional[BarDetection] = None,
+                       person_masks: Optional[List[Optional[np.ndarray]]] = None) -> List[Optional[BarDetection]]:
         """
         Track bar across a sequence of frames.
 
         Args:
             frames: List of frames
             initial_detection: Initial detection or None to auto-detect
+            person_masks: Optional list of person segmentation masks
 
         Returns:
             List of BarDetection objects (one per frame)
@@ -210,21 +230,27 @@ class BarTracker:
 
         detections = []
 
+        # Get mask for first frame
+        first_mask = person_masks[0] if person_masks and len(person_masks) > 0 else None
+
         # Initial detection
         if initial_detection:
             current_detection = initial_detection
         else:
-            current_detection = self.detect_bar_initial(frames[0])
+            current_detection = self.detect_bar_initial(frames[0], person_mask=first_mask)
 
         detections.append(current_detection)
 
         # Track through remaining frames
-        for frame in frames[1:]:
+        for i, frame in enumerate(frames[1:], 1):
+            # Get mask for this frame
+            mask = person_masks[i] if person_masks and i < len(person_masks) else None
+
             if current_detection:
-                current_detection = self.track_bar(frame, current_detection)
+                current_detection = self.track_bar(frame, current_detection, person_mask=mask)
             else:
                 # Try to re-detect if tracking lost
-                current_detection = self.detect_bar_initial(frame)
+                current_detection = self.detect_bar_initial(frame, person_mask=mask)
 
             detections.append(current_detection)
 
